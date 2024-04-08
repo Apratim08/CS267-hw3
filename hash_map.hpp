@@ -7,14 +7,18 @@ std::vector<std::vector>>
 
 struct HashMap {
 
-    std::vector<kmer_pair> data;
-    std::vector<int> used;
+    // Upcxx data structures 
+    std::vector< upcxx::global_ptr<int> > used; // used array global pointer
+    std::vector< upcxx::global_ptr<kmer_pair> > data; // data array global pointer
+    size_t size_of_chunks; // segmentation size for each thread
+    upcxx::atomic_domain<int32_t>* ad; // atomic domain class
 
     size_t my_size;
 
     size_t size() const noexcept;
 
     HashMap(size_t size);
+    ~HashMap();
 
     // Most important functions: insert and retrieve
     // k-mers from the hash table.
@@ -32,18 +36,33 @@ struct HashMap {
     bool slot_used(uint64_t slot);
 };
 
+HashMap::~HashMap() {
+    delete ad;
+}
+
 HashMap::HashMap(size_t size) {
     my_size = size;
-    // data.resize(size);
-    // used.resize(size, 0);
+    
     // calculate starting index for each rank to store data
     size_of_chunks = (my_size + upc::rank_n() - 1) / upc::rank_n();
-    start_idx = upc::rank_me() * size_of_chunks;
-    end_idx = std::min(start_idx + size_of_chunks, my_size);
-    
-    data = upcxx::new_array<kmer_pair>(size);
-    used = upcxx::new_array<int>(size);
-    upcxx::fill_n(used + start+idx, end_idx - start_idx, 0).wait(); 
+    data.resize(upc::rank_n());
+    used.resize(upc::rank_n());
+    // initialize data and used arrays
+    size_t start_idx = upc::rank_me() * size_of_chunks;
+    size_t end_idx = std::min(start_idx + size_of_chunks, my_size);
+    data[upc::rank_me()] = upcxx::new_array<kmer_pair>(end_idx - start_idx);
+    used[upc::rank_me()] = upcxx::new_array<int>(end_idx - start_idx);
+    // broadcast arrays to all ranks
+    for (int i = 0; i < upc::rank_n(); i++) {
+        data[i] = upcxx::broadcast(data[i], i).wait();
+        used[i] = upcxx::broadcast(used[i], i).wait();
+    }
+    // local pointer to the used array
+    int* used_local = used[upc::rank_me].local();
+    size_t start_local = upc::rank_me() * size_of_chunks;
+    size_t end_local = std::min(start_local + size_of_chunks, my_size);
+    // fill the local used array with zeros
+    upcxx::fill_n(used_local, end_local - start_local, 0).wait(); 
 }
 
 bool HashMap::insert(const kmer_pair& kmer) {
@@ -60,6 +79,7 @@ bool HashMap::insert(const kmer_pair& kmer) {
     return success;
 }
 
+// TODO: haven`t implemented the find function yet
 bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
     uint64_t hash = key_kmer.hash();
     uint64_t probe = 0;
@@ -76,17 +96,40 @@ bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
     return success;
 }
 
-bool HashMap::slot_used(uint64_t slot) { return used[slot] != 0; }
+bool HashMap::slot_used(uint64_t slot) { 
+    int rank = slot / split;
+    int index = slot % split;
+    return upcxx::rget(used[rank] + index).wait() != 0;
+ }
 
-void HashMap::write_slot(uint64_t slot, const kmer_pair& kmer) { data[slot] = kmer; }
+void HashMap::write_slot(uint64_t slot, const kmer_pair& kmer) { 
+    int rank = slot / split;
+    int index = slot % split;
+    return upcxx::rput(kmer, data[rank] + index).wait();
+}
 
-kmer_pair HashMap::read_slot(uint64_t slot) { return data[slot]; }
+kmer_pair HashMap::read_slot(uint64_t slot) { 
+    int rank = slot / split;
+    int index = slot % split;
+    return upcxx::rget(data[rank] + index).wait(); 
+}
 
 bool HashMap::request_slot(uint64_t slot) {
-    if (used[slot] != 0) {
+    // if (used[slot] != 0) {
+    //     return false;
+    // } else {
+    //     used[slot] = 1;
+    //     return true;
+    // }
+    int rank = slot / split;
+    int index = slot % split;
+    // Atomically check and update the value of used[rank] + index
+    int current_value = ad->atomic_exchange(&used[rank] + index, 1);
+
+    // If the previous value was not 0, the slot was already used
+    if (current_value != 0) {
         return false;
     } else {
-        used[slot] = 1;
         return true;
     }
 }
