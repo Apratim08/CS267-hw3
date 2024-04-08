@@ -3,7 +3,10 @@
 #include "kmer_t.hpp"
 #include <upcxx/upcxx.hpp>
 
+std::vector<std::vector>> 
+
 struct HashMap {
+
     std::vector<kmer_pair> data;
     std::vector<int> used;
 
@@ -31,8 +34,16 @@ struct HashMap {
 
 HashMap::HashMap(size_t size) {
     my_size = size;
-    data.resize(size);
-    used.resize(size, 0);
+    // data.resize(size);
+    // used.resize(size, 0);
+    // calculate starting index for each rank to store data
+    size_of_chunks = (my_size + upc::rank_n() - 1) / upc::rank_n();
+    start_idx = upc::rank_me() * size_of_chunks;
+    end_idx = std::min(start_idx + size_of_chunks, my_size);
+    
+    data = upcxx::new_array<kmer_pair>(size);
+    used = upcxx::new_array<int>(size);
+    upcxx::fill_n(used + start+idx, end_idx - start_idx, 0).wait(); 
 }
 
 bool HashMap::insert(const kmer_pair& kmer) {
