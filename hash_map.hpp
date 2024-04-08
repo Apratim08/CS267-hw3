@@ -47,6 +47,7 @@ HashMap::HashMap(size_t size) {
     size_of_chunks = (my_size + upc::rank_n() - 1) / upc::rank_n();
     data.resize(upc::rank_n());
     used.resize(upc::rank_n());
+    ad = new upcxx::atomic_domain<int32_t>(upcxx::atomic_op::compare_exchange);
     // initialize data and used arrays
     size_t start_idx = upc::rank_me() * size_of_chunks;
     size_t end_idx = std::min(start_idx + size_of_chunks, my_size);
