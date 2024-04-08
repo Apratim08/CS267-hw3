@@ -3,7 +3,7 @@
 #include "kmer_t.hpp"
 #include <upcxx/upcxx.hpp>
 
-std::vector<std::vector>> 
+
 
 struct HashMap {
 
@@ -87,10 +87,14 @@ bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
     bool success = false;
     do {
         uint64_t slot = (hash + probe++) % size();
-        if (slot_used(slot)) {
-            val_kmer = read_slot(slot);
-            if (val_kmer.kmer == key_kmer) {
-                success = true;
+        int rank = slot / size_of_chunks; 
+        if (upcxx::rank_me() == rank) { // check if the slot is in the current rank
+            int index = slot % size_of_chunks; 
+            if (slot_used(slot)) {
+                val_kmer = read_slot(slot);
+                if (val_kmer.kmer == key_kmer) {
+                    success = true;
+                }
             }
         }
     } while (!success && probe < size());
