@@ -44,26 +44,28 @@ HashMap::HashMap(size_t size) {
     my_size = size;
     
     // calculate starting index for each rank to store data
-    size_of_chunks = (my_size + upc::rank_n() - 1) / upc::rank_n();
-    data.resize(upc::rank_n());
-    used.resize(upc::rank_n());
-    ad = new upcxx::atomic_domain<int32_t>(upcxx::atomic_op::compare_exchange);
+    size_of_chunks = (my_size + upcxx::rank_n() - 1) / upcxx::rank_n();
+    data.resize(upcxx::rank_n());
+    used.resize(upcxx::rank_n());
+
+    // create new ad for atomic exchange 
+    ad = new upcxx::atomic_domain<int32_t>({upcxx::atomic_op::compare_exchange});
     // initialize data and used arrays
-    size_t start_idx = upc::rank_me() * size_of_chunks;
+    size_t start_idx = upcxx::rank_me() * size_of_chunks;
     size_t end_idx = std::min(start_idx + size_of_chunks, my_size);
-    data[upc::rank_me()] = upcxx::new_array<kmer_pair>(end_idx - start_idx);
-    used[upc::rank_me()] = upcxx::new_array<int>(end_idx - start_idx);
+    data[upcxx::rank_me()] = upcxx::new_array<kmer_pair>(end_idx - start_idx);
+    used[upcxx::rank_me()] = upcxx::new_array<int>(end_idx - start_idx);
     // broadcast arrays to all ranks
-    for (int i = 0; i < upc::rank_n(); i++) {
+    for (int i = 0; i < upcxx::rank_n(); i++) {
         data[i] = upcxx::broadcast(data[i], i).wait();
         used[i] = upcxx::broadcast(used[i], i).wait();
     }
     // local pointer to the used array
-    int* used_local = used[upc::rank_me].local();
-    size_t start_local = upc::rank_me() * size_of_chunks;
+    int* used_local = used[upcxx::rank_me()].local();
+    size_t start_local = upcxx::rank_me() * size_of_chunks;
     size_t end_local = std::min(start_local + size_of_chunks, my_size);
     // fill the local used array with zeros
-    upcxx::fill_n(used_local, end_local - start_local, 0).wait(); 
+    std::fill_n(used_local, end_local - start_local, 0); 
 }
 
 bool HashMap::insert(const kmer_pair& kmer) {
@@ -102,20 +104,20 @@ bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
 }
 
 bool HashMap::slot_used(uint64_t slot) { 
-    int rank = slot / split;
-    int index = slot % split;
+    int rank = slot / size_of_chunks;
+    int index = slot % size_of_chunks;
     return upcxx::rget(used[rank] + index).wait() != 0;
  }
 
 void HashMap::write_slot(uint64_t slot, const kmer_pair& kmer) { 
-    int rank = slot / split;
-    int index = slot % split;
+    int rank = slot / size_of_chunks;
+    int index = slot % size_of_chunks;
     return upcxx::rput(kmer, data[rank] + index).wait();
 }
 
 kmer_pair HashMap::read_slot(uint64_t slot) { 
-    int rank = slot / split;
-    int index = slot % split;
+    int rank = slot / size_of_chunks;
+    int index = slot % size_of_chunks;
     return upcxx::rget(data[rank] + index).wait(); 
 }
 
@@ -126,10 +128,26 @@ bool HashMap::request_slot(uint64_t slot) {
     //     used[slot] = 1;
     //     return true;
     // }
-    int rank = slot / split;
-    int index = slot % split;
+    int rank = slot / size_of_chunks;
+    int index = slot % size_of_chunks;
     // Atomically check and update the value of used[rank] + index
-    int current_value = ad->atomic_exchange(&used[rank] + index, 1);
+    int expected = 0;
+    int desired = 1;
+    int current_value = ad->compare_exchange(used[rank] + index, expected, desired, std::memory_order_relaxed).wait();
+
+    // upcxx::global_ptr<int> ptr = &used[rank] + index; // Pointer to the memory location
+    // int expected = 0; // Expected value
+    // int desired = 1; // Desired value
+    // int* original_value_ptr = nullptr; // Pointer to store the original value
+    // upcxx::atomic_domain<int>::VALUE_RTYPE<Cxs> result = ad->compare_exchange(ptr, expected, desired, original_value_ptr, std::memory_order_relaxed).wait();
+
+    
+    // int* ptr = &used[rank] + index; // Pointer to the memory location
+    // int expected = 0; // Expected value
+    // int desired = 1; // Desired value
+    // upcxx::atomic_domain<int>::VALUE_RTYPE<Cxs> result = ad->compare_exchange(ptr, expected, desired, ).wait();
+
+
 
     // If the previous value was not 0, the slot was already used
     if (current_value != 0) {
