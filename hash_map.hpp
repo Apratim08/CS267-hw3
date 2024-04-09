@@ -83,25 +83,42 @@ bool HashMap::insert(const kmer_pair& kmer) {
 }
 
 // TODO: haven`t implemented the find function yet
+// bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
+//     uint64_t hash = key_kmer.hash();
+//     uint64_t probe = 0;
+//     bool success = false;
+
+//     do {
+//         uint64_t slot = (hash + probe++) % size();
+      
+//         if (slot_used(slot)) {
+//             val_kmer = read_slot(slot);
+//             if (val_kmer.kmer == key_kmer) {
+//                 success = true;
+//             }
+//         }
+
+//     } while (!success && probe < size());
+//     return success;
+// }
+
 bool HashMap::find(const pkmer_t& key_kmer, kmer_pair& val_kmer) {
     uint64_t hash = key_kmer.hash();
     uint64_t probe = 0;
     bool success = false;
     do {
         uint64_t slot = (hash + probe++) % size();
-        int rank = slot / size_of_chunks; 
-        if (upcxx::rank_me() == rank) { // check if the slot is in the current rank
-            int index = slot % size_of_chunks; 
-            if (slot_used(slot)) {
-                val_kmer = read_slot(slot);
-                if (val_kmer.kmer == key_kmer) {
-                    success = true;
-                }
+        if (slot_used(slot)) {
+            val_kmer = read_slot(slot);
+            if (val_kmer.kmer == key_kmer) {
+                success = true;
             }
         }
     } while (!success && probe < size());
     return success;
 }
+
+
 
 bool HashMap::slot_used(uint64_t slot) { 
     int rank = slot / size_of_chunks;
@@ -134,20 +151,6 @@ bool HashMap::request_slot(uint64_t slot) {
     int expected = 0;
     int desired = 1;
     int current_value = ad->compare_exchange(used[rank] + index, expected, desired, std::memory_order_relaxed).wait();
-
-    // upcxx::global_ptr<int> ptr = &used[rank] + index; // Pointer to the memory location
-    // int expected = 0; // Expected value
-    // int desired = 1; // Desired value
-    // int* original_value_ptr = nullptr; // Pointer to store the original value
-    // upcxx::atomic_domain<int>::VALUE_RTYPE<Cxs> result = ad->compare_exchange(ptr, expected, desired, original_value_ptr, std::memory_order_relaxed).wait();
-
-    
-    // int* ptr = &used[rank] + index; // Pointer to the memory location
-    // int expected = 0; // Expected value
-    // int desired = 1; // Desired value
-    // upcxx::atomic_domain<int>::VALUE_RTYPE<Cxs> result = ad->compare_exchange(ptr, expected, desired, ).wait();
-
-
 
     // If the previous value was not 0, the slot was already used
     if (current_value != 0) {
