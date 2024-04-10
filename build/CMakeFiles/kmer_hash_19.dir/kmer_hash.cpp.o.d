@@ -258,7 +258,26 @@ CMakeFiles/kmer_hash_19.dir/kmer_hash.cpp.o: \
  /global/homes/a/apratim/CS267-hw3/kmer_t.hpp \
  /global/homes/a/apratim/CS267-hw3/packing.hpp \
  /usr/include/c++/12/cassert /usr/include/assert.h \
- /global/homes/a/apratim/CS267-hw3/pkmer_t.hpp \
+ /global/homes/a/apratim/CS267-hw3/pkmer_t.hpp /usr/include/c++/12/math.h \
+ /usr/include/c++/12/cmath /usr/include/math.h \
+ /usr/include/bits/math-vector.h /usr/include/bits/libm-simd-decl-stubs.h \
+ /usr/include/bits/flt-eval-method.h /usr/include/bits/fp-logb.h \
+ /usr/include/bits/fp-fast.h \
+ /usr/include/bits/mathcalls-helper-functions.h \
+ /usr/include/bits/mathcalls.h /usr/include/bits/mathcalls-narrow.h \
+ /usr/include/bits/iscanonical.h /usr/include/bits/mathinline.h \
+ /usr/include/c++/12/bits/specfun.h /usr/include/c++/12/tr1/gamma.tcc \
+ /usr/include/c++/12/tr1/special_function_util.h \
+ /usr/include/c++/12/tr1/bessel_function.tcc \
+ /usr/include/c++/12/tr1/beta_function.tcc \
+ /usr/include/c++/12/tr1/ell_integral.tcc \
+ /usr/include/c++/12/tr1/exp_integral.tcc \
+ /usr/include/c++/12/tr1/hypergeometric.tcc \
+ /usr/include/c++/12/tr1/legendre_function.tcc \
+ /usr/include/c++/12/tr1/modified_bessel_func.tcc \
+ /usr/include/c++/12/tr1/poly_hermite.tcc \
+ /usr/include/c++/12/tr1/poly_laguerre.tcc \
+ /usr/include/c++/12/tr1/riemann_zeta.tcc \
  /global/homes/a/apratim/CS267-hw3/read_kmers.hpp \
  /usr/include/c++/12/fstream \
  /usr/include/c++/12/x86_64-suse-linux/bits/basic_file.h \
