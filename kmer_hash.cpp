@@ -17,13 +17,6 @@
 int main(int argc, char** argv) {
     upcxx::init();
 
-    // TODO: Dear Students,
-    // Please remove this if statement, when you start writing your parallel implementation.
-    // if (upcxx::rank_n() > 1) {
-    //     throw std::runtime_error("Error: parallel implementation not started yet!"
-    //                              " (remove this when you start working.)");
-    // }
-
     if (argc < 2) {
         BUtil::print("usage: srun -N nodes -n ranks ./kmer_hash kmer_file [verbose|test [prefix]]\n");
         upcxx::finalize();
@@ -55,8 +48,8 @@ int main(int argc, char** argv) {
 
     // Load factor of 0.5
     size_t hash_table_size = n_kmers * (1.0 / 0.5);
+	
     HashMap hashmap(hash_table_size);
-   
 
     if (run_type == "verbose") {
         BUtil::print("Initializing hash table of size %d for %d kmers.\n", hash_table_size,
@@ -72,37 +65,17 @@ int main(int argc, char** argv) {
     auto start = std::chrono::high_resolution_clock::now();
 
     std::vector<kmer_pair> start_nodes;
-    // std::vector<upcxx::global_ptr<kmer_pair>> start_nodes;
 
-    size_t chunk_size = (kmers.size() + upcxx::rank_n() - 1) / upcxx::rank_n();
-    size_t start_idx = upcxx::rank_me() * chunk_size;
-    size_t end_idx = std::min(start_idx + chunk_size, kmers.size());
-
-    for (size_t i = start_idx; i < end_idx; i++) {
-        //print what will be inserted
-        printf("Rank %d inserting %s\n", upcxx::rank_me(), kmers[i]);
-        bool success = hashmap.insert(kmers[i]);
+    for (auto& kmer : kmers) {
+        bool success = hashmap.insert(kmer); 
         if (!success) {
             throw std::runtime_error("Error: HashMap is full!");
         }
 
-        if (kmers[i].backwardExt() == 'F') {
-            start_nodes.push_back(kmers[i]);
+        if (kmer.backwardExt() == 'F') {
+            start_nodes.push_back(kmer);
         }
     }
-
-   
-
-    // for (auto& kmer : kmers) {
-    //     bool success = hashmap.insert(kmer);
-    //     if (!success) {
-    //         throw std::runtime_error("Error: HashMap is full!");
-    //     }
-
-    //     if (kmer.backwardExt() == 'F') {
-    //         start_nodes.push_back(kmer);
-    //     }
-    // }
     auto end_insert = std::chrono::high_resolution_clock::now();
     upcxx::barrier();
 
@@ -112,11 +85,9 @@ int main(int argc, char** argv) {
     }
     upcxx::barrier();
 
-
     auto start_read = std::chrono::high_resolution_clock::now();
 
     std::list<std::list<kmer_pair>> contigs;
-
     for (const auto& start_kmer : start_nodes) {
         std::list<kmer_pair> contig;
         contig.push_back(start_kmer);
